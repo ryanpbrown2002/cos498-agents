@@ -6,12 +6,10 @@ A voice-driven frontend development application. Talk to it and watch it build a
 
 Speak your design intent and watch multiple AI agents collaboratively generate, iterate, and refine a live frontend right in front of you. Rapid feedback loops let you steer the UI with your voice while agents handle the code.
 
-## Architecture (Planned)
+## Documentation
 
-- **Voice input** — Continuous speech-to-text captures design intent
-- **Agent orchestration** — Multiple agents work in parallel on components, layout, and styling
-- **Live preview** — Generated frontend renders instantly as agents produce code
-- **Conversational feedback** — Refine the UI by talking, not clicking
+- [Architecture](docs/ARCHITECTURE.md) — system design, agent descriptions, tech stack, communication patterns
+- [Specs](docs/SPECS.md) — ordered implementation tasks with acceptance criteria
 
 ## Dev Environment
 
