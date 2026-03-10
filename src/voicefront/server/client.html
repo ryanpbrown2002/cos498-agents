@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceFront</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: monospace; height: 100vh; display: flex; flex-direction: column; }
+        header { background: #1a1a2e; color: #eee; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+        header h1 { font-size: 16px; }
+        #status { font-size: 12px; padding: 3px 8px; border-radius: 4px; }
+        .status-listening { background: #2ecc71; color: #000; }
+        .status-off { background: #e74c3c; color: #fff; }
+        .status-connecting { background: #f39c12; color: #000; }
+        main { flex: 1; display: flex; overflow: hidden; }
+        #transcript-panel {
+            width: 320px; min-width: 250px; background: #16213e; color: #ddd;
+            display: flex; flex-direction: column; border-right: 1px solid #333;
+        }
+        #transcript-panel h2 { font-size: 13px; padding: 10px; background: #0f3460; }
+        #transcript-list {
+            flex: 1; overflow-y: auto; padding: 10px; font-size: 13px; line-height: 1.6;
+        }
+        .transcript-item { margin-bottom: 8px; padding: 6px 8px; background: #1a1a2e; border-radius: 4px; }
+        .transcript-interim { opacity: 0.5; font-style: italic; }
+        #preview-panel { flex: 1; display: flex; flex-direction: column; background: #fff; }
+        #preview-panel h2 {
+            font-size: 13px; padding: 10px; background: #f0f0f0; color: #333;
+            border-bottom: 1px solid #ddd;
+        }
+        #preview-frame { flex: 1; border: none; }
+        #error-bar {
+            display: none; background: #e74c3c; color: #fff;
+            padding: 8px 12px; font-size: 12px;
+        }
+        #error-bar.visible { display: block; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>VoiceFront</h1>
+        <span id="status" class="status-connecting">connecting...</span>
+    </header>
+    <main>
+        <div id="transcript-panel">
+            <h2>Transcript</h2>
+            <div id="transcript-list"></div>
+        </div>
+        <div id="preview-panel">
+            <h2>Live Preview</h2>
+            <div id="error-bar"></div>
+            <iframe id="preview-frame" src="/preview"></iframe>
+        </div>
+    </main>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const transcriptList = document.getElementById('transcript-list');
+        const previewFrame = document.getElementById('preview-frame');
+        const errorBar = document.getElementById('error-bar');
+
+        // --- WebSocket ---
+        let ws;
+        function connectWS() {
+            const wsUrl = `ws://${location.hostname}:8765`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                statusEl.textContent = 'connected';
+                statusEl.className = 'status-connecting';
+                startSpeechRecognition();
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'reload') {
+                    errorBar.classList.remove('visible');
+                    previewFrame.src = previewFrame.src;
+                } else if (data.type === 'error') {
+                    errorBar.textContent = data.errors.join('; ');
+                    errorBar.classList.add('visible');
+                }
+            };
+
+            ws.onclose = () => {
+                statusEl.textContent = 'disconnected';
+                statusEl.className = 'status-off';
+                setTimeout(connectWS, 2000);
+            };
+        }
+        connectWS();
+
+        // --- Speech Recognition ---
+        function startSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                statusEl.textContent = 'speech not supported';
+                statusEl.className = 'status-off';
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            let interimEl = null;
+
+            recognition.onstart = () => {
+                statusEl.textContent = 'listening';
+                statusEl.className = 'status-listening';
+            };
+
+            recognition.onresult = (event) => {
+                let interim = '';
+                let final_ = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        final_ += transcript;
+                    } else {
+                        interim += transcript;
+                    }
+                }
+
+                // Show interim results
+                if (interim) {
+                    if (!interimEl) {
+                        interimEl = document.createElement('div');
+                        interimEl.className = 'transcript-item transcript-interim';
+                        transcriptList.appendChild(interimEl);
+                    }
+                    interimEl.textContent = interim;
+                    transcriptList.scrollTop = transcriptList.scrollHeight;
+                }
+
+                // Send final results
+                if (final_) {
+                    if (interimEl) {
+                        interimEl.remove();
+                        interimEl = null;
+                    }
+                    const item = document.createElement('div');
+                    item.className = 'transcript-item';
+                    item.textContent = final_;
+                    transcriptList.appendChild(item);
+                    transcriptList.scrollTop = transcriptList.scrollHeight;
+
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'transcript', text: final_ }));
+                    }
+                }
+            };
+
+            recognition.onerror = (event) => {
+                if (event.error !== 'no-speech') {
+                    console.error('Speech recognition error:', event.error);
+                }
+            };
+
+            recognition.onend = () => {
+                // Auto-restart
+                recognition.start();
+            };
+
+            recognition.start();
+        }
+    </script>
+</body>
+</html>
