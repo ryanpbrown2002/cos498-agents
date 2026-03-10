@@ -24,9 +24,14 @@ Rules:
 class WriterAgent(BaseAgent):
     """Generates and modifies frontend code based on tasks."""
 
-    def __init__(self, event_bus: EventBus, claude_client: Any, generated_dir: str) -> None:
-        super().__init__(name="writer", event_bus=event_bus, claude_client=claude_client)
+    _counter = 0
+
+    def __init__(self, event_bus: EventBus, claude_client: Any, generated_dir: str, agent_id: str = None) -> None:
+        WriterAgent._counter += 1
+        name = agent_id or f"writer-{WriterAgent._counter}"
+        super().__init__(name=name, event_bus=event_bus, claude_client=claude_client)
         self.generated_dir = generated_dir
+        self.agent_id = name
         self.subscribe(TASK_ASSIGNED)
 
     async def handle(self, payload: dict) -> None:
